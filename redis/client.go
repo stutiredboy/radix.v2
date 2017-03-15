@@ -49,9 +49,9 @@ type request struct {
 
 // DialTimeout connects to the given Redis server with the given timeout, which
 // will be used as the read/write timeout when communicating with redis
-func DialTimeout(network, addr string, timeout time.Duration) (*Client, error) {
+func DialTimeout(network, addr string, conn_timeout, read_timeout time.Duration) (*Client, error) {
 	// establish a connection
-	conn, err := net.DialTimeout(network, addr, timeout)
+	conn, err := net.DialTimeout(network, addr, conn_timeout)
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +60,7 @@ func DialTimeout(network, addr string, timeout time.Duration) (*Client, error) {
 	return &Client{
 		conn:          conn,
 		respReader:    NewRespReader(conn),
-		timeout:       timeout,
+		timeout:       read_timeout,
 		writeScratch:  make([]byte, 0, 128),
 		writeBuf:      bytes.NewBuffer(make([]byte, 0, 128)),
 		completed:     completed,
@@ -72,7 +72,7 @@ func DialTimeout(network, addr string, timeout time.Duration) (*Client, error) {
 
 // Dial connects to the given Redis server.
 func Dial(network, addr string) (*Client, error) {
-	return DialTimeout(network, addr, time.Duration(0))
+	return DialTimeout(network, addr, time.Duration(0), time.Duration(0))
 }
 
 // Close closes the connection.

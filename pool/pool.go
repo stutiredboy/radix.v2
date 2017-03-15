@@ -1,7 +1,8 @@
 package pool
 
 import (
-	"github.com/mediocregopher/radix.v2/redis"
+	"time"
+	"github.com/stutiredboy/radix.v2/redis"
 )
 
 // Pool is a simple connection pool for redis Clients. It will create a small
@@ -16,20 +17,21 @@ type Pool struct {
 	// whatever was passed into the New function. These should not be
 	// changed after the pool is initialized
 	Network, Addr string
+	connect_timeout, read_timeout time.Duration
 }
 
 // DialFunc is a function which can be passed into NewCustom
-type DialFunc func(network, addr string) (*redis.Client, error)
+type DialFunc func(network, addr string, connect_timeout, read_timeout time.Duration) (*redis.Client, error)
 
 // NewCustom is like New except you can specify a DialFunc which will be
 // used when creating new connections for the pool. The common use-case is to do
 // authentication for new connections.
-func NewCustom(network, addr string, size int, df DialFunc) (*Pool, error) {
+func NewCustom(network, addr string, size int, connect_timeout, read_timeout time.Duration, df DialFunc) (*Pool, error) {
 	var client *redis.Client
 	var err error
 	pool := make([]*redis.Client, 0, size)
 	for i := 0; i < size; i++ {
-		client, err = df(network, addr)
+		client, err = df(network, addr, connect_timeout, read_timeout)
 		if err != nil {
 			for _, client = range pool {
 				client.Close()
@@ -44,6 +46,8 @@ func NewCustom(network, addr string, size int, df DialFunc) (*Pool, error) {
 		Addr:    addr,
 		pool:    make(chan *redis.Client, len(pool)),
 		df:      df,
+		connect_timeout: connect_timeout,
+		read_timeout: read_timeout,
 	}
 	for i := range pool {
 		p.pool <- pool[i]
@@ -56,7 +60,7 @@ func NewCustom(network, addr string, size int, df DialFunc) (*Pool, error) {
 // connections to have waiting to be used at any given moment. If an error is
 // encountered an empty (but still usable) pool is returned alongside that error
 func New(network, addr string, size int) (*Pool, error) {
-	return NewCustom(network, addr, size, redis.Dial)
+	return NewCustom(network, addr, size, time.Duration(0), time.Duration(0), redis.DialTimeout)
 }
 
 // Get retrieves an available redis client. If there are none available it will
@@ -66,7 +70,7 @@ func (p *Pool) Get() (*redis.Client, error) {
 	case conn := <-p.pool:
 		return conn, nil
 	default:
-		return p.df(p.Network, p.Addr)
+		return p.df(p.Network, p.Addr, p.connect_timeout, p.read_timeout)
 	}
 }
 
