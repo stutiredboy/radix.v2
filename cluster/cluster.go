@@ -23,9 +23,7 @@ import (
 	"github.com/mediocregopher/radix.v2/redis"
 )
 
-const numSlots = 16384
-
-type mapping [numSlots]string
+type mapping [NumSlots]string
 
 func errorResp(err error) *redis.Resp {
 	return redis.NewResp(err)
@@ -388,6 +386,11 @@ func (c *Cluster) resetInnerUsingPool(p clusterPool) error {
 // command's reply. The command *must* have a key parameter (i.e. len(args) >=
 // 1). If any MOVED or ASK errors are returned they will be transparently
 // handled by this method.
+//
+// NOTE if you're doing any lua or scan operations through this method you might
+// save yourself some time and effort by checking out the LuaEval and NewScanner
+// functions in the util package. They properly handle the cluster client being
+// used.
 func (c *Cluster) Cmd(cmd string, args ...interface{}) *redis.Resp {
 	if len(args) < 1 {
 		return errorResp(ErrBadCmdNoKey)
@@ -530,13 +533,7 @@ func redirectInfo(msg string) (int, string) {
 }
 
 func keyToAddr(key string, mapping *mapping) string {
-	if start := strings.Index(key, "{"); start >= 0 {
-		if end := strings.Index(key[start+2:], "}"); end >= 0 {
-			key = key[start+1 : start+2+end]
-		}
-	}
-	i := CRC16([]byte(key)) % numSlots
-	return mapping[i]
+	return mapping[Slot(key)]
 }
 
 // GetForKey returns the Client which *ought* to handle the given key, based
